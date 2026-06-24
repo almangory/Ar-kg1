@@ -198,6 +198,237 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
     }, 800);
   };
 
+  // --- ALPHABET SEQUENCE GAME STATE (A TO Y) ---
+  const [seqIndex, setSeqIndex] = useState(0); // tracks 0 to 27
+  const [seqPlacedLetters, setSeqPlacedLetters] = useState<(Letter | null)[]>(new Array(28).fill(null));
+  const [seqScrambledLetters, setSeqScrambledLetters] = useState<Letter[]>([]);
+  const [seqFinished, setSeqFinished] = useState(false);
+  const [seqFeedback, setSeqFeedback] = useState<"correct" | "incorrect" | null>(null);
+  
+  // Custom drag tracking states for pointer events
+  const [seqDraggingId, setSeqDraggingId] = useState<number | null>(null);
+  const [seqDragOffset, setSeqDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [seqDragStart, setSeqDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  
+  const [seqHighScore, setSeqHighScore] = useState<number>(() => {
+    const saved = localStorage.getItem("alphabet_sequence_high_score");
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  const startAlphabetSequenceGame = () => {
+    setSeqIndex(0);
+    setSeqPlacedLetters(new Array(28).fill(null));
+    // Shuffle all 28 letters
+    const scrambled = [...ARABIC_LETTERS].sort(() => Math.random() - 0.5);
+    setSeqScrambledLetters(scrambled);
+    setSeqFinished(false);
+    setSeqFeedback(null);
+    setSeqDraggingId(null);
+    setSeqDragOffset({ x: 0, y: 0 });
+    setActiveGame("alphabetSequence");
+    
+    setTimeout(() => {
+      audio.speakArabic("لُعْبَةُ طَرِيقِ الْحُرُوفِ السَّاحِرْ! رَتِّبِ الْحُرُوفَ مِنَ الْأَلِفِ إِلَى الْيَاءْ لِتَكْسِبَ التَّاجَ الذَّهَبِيّ!");
+    }, 500);
+  };
+
+  const playLetterMelodyNote = (index: number) => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+      
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "triangle";
+      const baseFreq = 261.63; // C4
+      const freq = baseFreq * Math.pow(1.059463, index);
+      
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.02, now + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(freq, now + 0.3);
+      
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(now + 0.4);
+    } catch (e) {
+      console.error("Melody synthesis error", e);
+    }
+  };
+
+  const playAlphabetCelebrationSong = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+      
+      ARABIC_LETTERS.forEach((_, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.type = "sine";
+        const baseFreq = 261.63; // C4
+        const freq = baseFreq * Math.pow(1.059463, idx);
+        
+        const noteStartTime = now + idx * 0.18;
+        const noteDuration = 0.15;
+        
+        osc.frequency.setValueAtTime(freq, noteStartTime);
+        
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.15, noteStartTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, noteStartTime + noteDuration);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start(noteStartTime);
+        osc.stop(noteStartTime + noteDuration);
+      });
+      
+      setTimeout(() => {
+        [261.63, 329.63, 392.00, 523.25].forEach((freq) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "triangle";
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 1.2);
+        });
+      }, 28 * 180 + 100);
+      
+    } catch (e) {
+      console.error("Celebration song synthesis error", e);
+    }
+  };
+
+  const handleSeqPlacement = (letter: Letter) => {
+    // Correct next expected letter in alphabetical order:
+    const expectedLetter = ARABIC_LETTERS[seqIndex];
+    
+    if (letter.id === expectedLetter.id) {
+      // Correct!
+      audio.playStarSound();
+      playLetterMelodyNote(seqIndex);
+      
+      const newPlaced = [...seqPlacedLetters];
+      newPlaced[seqIndex] = letter;
+      setSeqPlacedLetters(newPlaced);
+      
+      // Remove from scrambled list
+      setSeqScrambledLetters(prev => prev.filter(l => l.id !== letter.id));
+      setSeqFeedback("correct");
+      onUpdateStars(2); // 2 stars for each correct letter placed!
+      
+      // Speak letter name & word
+      setTimeout(() => {
+        audio.speakArabic(`رَائِعْ! ${letter.char}، ${letter.word}`);
+      }, 100);
+
+      const nextIndex = seqIndex + 1;
+      if (nextIndex < 28) {
+        setSeqIndex(nextIndex);
+        setTimeout(() => {
+          setSeqFeedback(null);
+        }, 1500);
+      } else {
+        // Game Completed!
+        endAlphabetSequenceGame();
+      }
+    } else {
+      // Incorrect letter!
+      audio.playBuzzerSound();
+      setSeqFeedback("incorrect");
+      setTimeout(() => {
+        audio.speakArabic(`هَذَا لَيْسَ حَرْفَ ${expectedLetter.char}، حَاوِلْ مَرَّةً أُخْرَى!`);
+        setSeqFeedback(null);
+      }, 1500);
+    }
+  };
+
+  const endAlphabetSequenceGame = () => {
+    setSeqFinished(true);
+    audio.playCheerSound();
+    playAlphabetCelebrationSong();
+    
+    // Save completion highscore
+    const savedHighScore = localStorage.getItem("alphabet_sequence_high_score");
+    const currentHigh = savedHighScore ? parseInt(savedHighScore, 10) : 0;
+    if (28 > currentHigh) {
+      setSeqHighScore(28);
+      localStorage.setItem("alphabet_sequence_high_score", "28");
+    }
+    
+    onUpdateStars(50); // huge 50 star reward for completing the whole alphabet road!
+    
+    setTimeout(() => {
+      audio.speakArabic("أَلْفُ مَبْرُوكْ يَا بَطَلْ! لَقَدْ أَكْمَلْتَ طَرِيقَ الْحُرُوفِ الْعَرَبِيَّةِ كَامِلًا مِنَ الْأَلِفِ إِلَى الْيَاءْ وَأَصْبَحْتَ مَلِكَ الْحُرُوفْ!");
+    }, 1200);
+  };
+
+  const handleSeqPointerDown = (e: React.PointerEvent<HTMLButtonElement>, letter: Letter) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setSeqDraggingId(letter.id);
+    setSeqDragOffset({ x: 0, y: 0 });
+    setSeqDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleSeqPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (seqDraggingId === null) return;
+    const dx = e.clientX - seqDragStart.x;
+    const dy = e.clientY - seqDragStart.y;
+    setSeqDragOffset({ x: dx, y: dy });
+  };
+
+  const handleSeqPointerUp = (e: React.PointerEvent<HTMLButtonElement>, letter: Letter) => {
+    if (seqDraggingId === null) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    
+    const dx = e.clientX - seqDragStart.x;
+    const dy = e.clientY - seqDragStart.y;
+    const dragDistance = Math.sqrt(dx * dx + dy * dy);
+    
+    setSeqDraggingId(null);
+    setSeqDragOffset({ x: 0, y: 0 });
+    
+    // If they dragged it, check if they let go near the active drop slot
+    if (dragDistance > 10) {
+      const targetElement = document.getElementById("seq-target-slot");
+      if (targetElement) {
+        const rect = targetElement.getBoundingClientRect();
+        const buffer = 80; // responsive padding drop zone
+        const isDroppedOver = 
+          e.clientX >= rect.left - buffer &&
+          e.clientX <= rect.right + buffer &&
+          e.clientY >= rect.top - buffer &&
+          e.clientY <= rect.bottom + buffer;
+          
+        if (isDroppedOver) {
+          handleSeqPlacement(letter);
+        } else {
+          // Dropped elsewhere - play pop/bounce back
+          audio.playPopSound();
+        }
+      }
+    } else {
+      // Just a tap - trigger automatic placement to keep game super friendly!
+      handleSeqPlacement(letter);
+    }
+  };
+
   // --- ODD ONE OUT GAME STATE ---
   interface OddQuestion {
     options: string[];
@@ -764,7 +995,7 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
             العب مع الحروف السحرية، طابق الصور بالكلمات، واجتز مسابقة التحدي لتجمع النجوم وتحصل على كؤوس الفوز المذهلة! 🏆
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-6 max-w-7xl w-full">
             {/* Game 1: Balloon Pop */}
             <button
               onClick={startBalloonGame}
@@ -777,7 +1008,7 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
               <p className="text-xs text-slate-500 font-sans leading-relaxed flex-1">
                 استمع للحرف وقم بتفجير البالون الطائر الصحيح لجمع النجوم في أسرع وقت!
               </p>
-              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100">
+              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-pink-100">
                 <Trophy className="w-3.5 h-3.5" />
                 <span>أعلى مجموع نقاط: {progress.balloonHighScore}</span>
               </div>
@@ -795,7 +1026,7 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
               <p className="text-xs text-slate-500 font-sans leading-relaxed flex-1">
                 اكشف الكروت السحرية وطابق كل حرف بصورة الحيوان والكلمة الصحيحة!
               </p>
-              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100">
+              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-cyan-100">
                 <Trophy className="w-3.5 h-3.5" />
                 <span>أعلى مجموع نقاط: {progress.matchingHighScore}</span>
               </div>
@@ -813,7 +1044,7 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
               <p className="text-xs text-slate-500 font-sans leading-relaxed flex-1">
                 مسابقة شيقة وممتعة! استمع للكلمة والرمز، واختر الحرف الأول الصحيح لتركيب قطار الكلمات!
               </p>
-              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100">
+              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-violet-100">
                 <Trophy className="w-3.5 h-3.5" />
                 <span>أعلى مجموع نقاط: {quizHighScore} / 5</span>
               </div>
@@ -831,13 +1062,13 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
               <p className="text-xs text-slate-500 font-sans leading-relaxed flex-1">
                 أوجد الحرف الغريب الذي لا يشبه رفاقه الفقاعات الثلاثة الأخرى واكسب النجوم بسرعة!
               </p>
-              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100">
+              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-emerald-100">
                 <Trophy className="w-3.5 h-3.5" />
                 <span>أعلى مجموع نقاط: {oddHighScore} / 5</span>
               </div>
             </button>
 
-            {/* Game 5: Letter Ordering Game (NEW!) */}
+            {/* Game 5: Letter Ordering Game */}
             <button
               onClick={startOrderingGame}
               className="flex flex-col items-center p-6 rounded-3xl bg-white border-4 border-b-8 border-amber-100 hover:border-amber-300 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-center group cursor-pointer"
@@ -852,6 +1083,24 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
               <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100">
                 <Trophy className="w-3.5 h-3.5" />
                 <span>أعلى مجموع نقاط: {orderingHighScore} / 5</span>
+              </div>
+            </button>
+
+            {/* Game 6: Alphabet Sequence Game (NEW!) */}
+            <button
+              onClick={startAlphabetSequenceGame}
+              className="flex flex-col items-center p-6 rounded-3xl bg-white border-4 border-b-8 border-orange-100 hover:border-orange-300 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-center group cursor-pointer"
+            >
+              <span className="text-5xl mb-3 animate-bounce">🗺️</span>
+              <h3 className="text-xl font-black font-sans text-orange-600 mb-2 group-hover:scale-105 transition-transform">
+                طريق الحروف السحري
+              </h3>
+              <p className="text-xs text-slate-500 font-sans leading-relaxed flex-1">
+                رتب الحروف الـ 28 كاملة بالتسلسل الأبجدي الصحيح من الألف إلى الياء لتكسب التاج والنجوم!
+              </p>
+              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-orange-100">
+                <Trophy className="w-3.5 h-3.5" />
+                <span>أعلى نقاط: {seqHighScore} / 28</span>
               </div>
             </button>
           </div>
@@ -1423,6 +1672,199 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
                     className="px-6 py-3 rounded-2xl bg-amber-500 border-b-4 border-amber-700 hover:bg-amber-600 text-white font-sans font-bold transition-all shadow-md active:scale-95 cursor-pointer"
                   >
                     العب مرة أخرى 🔄
+                  </button>
+                  <button
+                    onClick={() => setActiveGame(null)}
+                    className="px-6 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-sans font-bold transition-all cursor-pointer"
+                  >
+                    الخروج للرئيسية 🚪
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : activeGame === "alphabetSequence" ? (
+        // --- ALPHABET SEQUENCE GAME PLAY UI ---
+        <div className="flex-1 flex flex-col bg-white rounded-3xl border-4 border-orange-100 shadow-lg overflow-hidden relative" id="seq-game-panel">
+          {/* Header Stats bar */}
+          <div className="bg-orange-50/50 border-b border-orange-100 px-6 py-4 flex flex-wrap gap-4 items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🗺️</span>
+              <h3 className="text-xl font-extrabold font-sans text-orange-600">طريق الحروف السحرية</h3>
+            </div>
+
+            {/* Question Progress Tracker */}
+            {!seqFinished && (
+              <div className="bg-orange-100 border border-orange-200 px-4 py-1.5 rounded-full text-orange-800 font-black text-xs font-sans">
+                الحرف التالي: <span className="text-sm font-black text-orange-950 bg-white px-2 py-0.5 rounded-md border border-orange-200">{ARABIC_LETTERS[seqIndex]?.char}</span> ({seqIndex + 1} من 28)
+              </div>
+            )}
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+                <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                <span className="font-mono font-bold text-amber-700 text-sm">النقاط: {seqIndex * 2}</span>
+              </div>
+              <button
+                onClick={startAlphabetSequenceGame}
+                className="p-1.5 rounded-xl bg-white border border-orange-200 text-orange-600 hover:bg-orange-50 transition-colors cursor-pointer"
+                title="إعادة بدء اللعبة"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Active Game Area */}
+          <div className="flex-1 p-4 md:p-6 bg-gradient-to-b from-orange-50/20 to-amber-100/10 flex flex-col items-center justify-center min-h-[480px]">
+            {!seqFinished ? (
+              <div className="w-full max-w-5xl flex flex-col gap-6" id="active-seq-card">
+                {/* Clue Prompt Card */}
+                <div className="bg-white border-4 border-b-8 border-orange-200 rounded-3xl p-4 md:p-6 flex flex-col md:flex-row items-center justify-between shadow-md relative overflow-hidden text-right">
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-orange-100/40 rounded-full translate-x-1/3 -translate-y-1/3" />
+                  
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold font-sans text-slate-500 mb-1">طريق الحروف السحرية 🌟</h4>
+                    <p className="text-lg md:text-xl font-black font-sans text-slate-900 leading-relaxed">
+                      اسْحَبِ الْحَرْفَ الصَّحِيحَ أو اضغط عليهِ لِتَضَعَهُ فِي مَكَانِهِ الْمُنَاسِبِ عَلَى طَرِيقِ الْحُرُوفِ السَّحِريّ! ✨
+                    </p>
+                    {/* Vocal Repeat button */}
+                    <button
+                      onClick={() => audio.speakArabic(`الآن ضَعْ حَرْفَ الـ ${ARABIC_LETTERS[seqIndex]?.name} فِي طَرِيقِ الْحُرُوفِ يَا بَطَلْ.`)}
+                      className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-100 text-xs font-bold font-sans cursor-pointer"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>استمع للحرف المطلوب 🔊</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grid of 28 Stepping Stones Pathway */}
+                <div className="bg-white p-4 md:p-6 rounded-3xl border-4 border-amber-200/50 shadow-md flex flex-col items-center">
+                  <span className="text-xs font-black font-sans text-slate-400 mb-3">خريطة طريق الحروف العربية (من اليمين إلى اليسار) 🗺️</span>
+                  
+                  {/* Stepping Stones Board */}
+                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-3 md:gap-4 w-full max-w-4xl" dir="rtl">
+                    {ARABIC_LETTERS.map((letter, idx) => {
+                      const isPlaced = seqPlacedLetters[idx] !== null;
+                      const isActive = idx === seqIndex;
+                      const isLocked = idx > seqIndex;
+                      
+                      // Convert index to Arabic Indic Numerals
+                      const arabicNum = idx.toString().split("").map(digit => {
+                        const dict: {[key:string]:string} = {"0":"٠","1":"١","2":"٢","3":"٣","4":"٤","5":"٥","6":"٦","7":"٧","8":"٨","9":"٩"};
+                        return dict[digit] || digit;
+                      }).join("");
+
+                      if (isPlaced) {
+                        return (
+                          <div
+                            key={letter.id}
+                            className={`aspect-square rounded-2xl border-4 border-b-8 flex flex-col items-center justify-center transition-all duration-300 shadow-md ${letter.color} ${letter.borderColor} ${letter.textColor} select-none relative animate-fade-in`}
+                          >
+                            <span className="text-3xl font-black font-sans">{letter.char}</span>
+                            <span className="text-[9px] font-bold font-sans mt-0.5">{letter.emoji} {letter.name}</span>
+                            <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white" />
+                          </div>
+                        );
+                      } else if (isActive) {
+                        return (
+                          <button
+                            key={letter.id}
+                            id="seq-target-slot"
+                            className="aspect-square rounded-2xl border-4 border-dashed border-orange-400 bg-orange-50/40 text-orange-500 hover:bg-orange-50 flex flex-col items-center justify-center transition-all duration-300 shadow-sm relative scale-105 ring-4 ring-orange-200/50 animate-pulse cursor-default"
+                          >
+                            <span className="text-xs font-black font-sans">هنا</span>
+                            <span className="text-lg">⭐</span>
+                            <span className="text-[10px] font-sans text-orange-300 opacity-40 absolute bottom-1">{letter.char}</span>
+                          </button>
+                        );
+                      } else {
+                        return (
+                          <div
+                            key={letter.id}
+                            className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 text-slate-300 flex flex-col items-center justify-center select-none"
+                          >
+                            <span className="text-lg font-bold font-sans">{arabicNum}</span>
+                            <span className="text-[10px] font-black font-sans opacity-25">{letter.char}</span>
+                          </div>
+                        );
+                      }
+                    })}
+                  </div>
+                </div>
+
+                {/* The Wooden Toy Chest of Remaining Letters */}
+                <div className="bg-amber-100/70 border-4 border-amber-800/40 rounded-3xl p-4 md:p-6 shadow-inner flex flex-col items-center gap-3">
+                  <div className="flex items-center gap-2 bg-amber-800 text-amber-50 px-4 py-1.5 rounded-full border border-amber-900/30 shadow-sm">
+                    <span className="text-lg">📦</span>
+                    <span className="text-xs font-black font-sans">صندوق الحروف الخشبية المبعثرة (اضغط أو اسحب الحرف الصحيح)</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-3 max-h-[160px] overflow-y-auto w-full px-2 py-1 select-none custom-scrollbar">
+                    {seqScrambledLetters.map((letter) => {
+                      const isDragging = seqDraggingId === letter.id;
+                      
+                      return (
+                        <button
+                          key={letter.id}
+                          onPointerDown={(e) => handleSeqPointerDown(e, letter)}
+                          onPointerMove={handleSeqPointerMove}
+                          onPointerUp={(e) => handleSeqPointerUp(e, letter)}
+                          style={{
+                            transform: isDragging ? `translate(${seqDragOffset.x}px, ${seqDragOffset.y}px)` : "none",
+                            zIndex: isDragging ? 1000 : 1,
+                            transition: isDragging ? "none" : "transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+                            touchAction: "none"
+                          }}
+                          className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl border-4 border-b-8 flex flex-col items-center justify-center transition-all duration-200 shadow-md cursor-grab active:cursor-grabbing select-none relative bg-amber-50 border-amber-300 hover:bg-amber-100 hover:border-amber-400 text-amber-800 ${
+                            isDragging ? "shadow-xl scale-110 opacity-90 border-orange-400 text-orange-700" : ""
+                          }`}
+                        >
+                          <span className="text-2xl md:text-3xl font-black font-sans pointer-events-none">{letter.char}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Instant Feedback Overlay Text */}
+                {seqFeedback === "correct" && (
+                  <p className="text-center font-black text-xl text-emerald-600 font-sans animate-bounce mt-1">
+                    رائع جداً! رتبت الحرف بشكل صحيح! 🌟🎉 (+2 نجمة)
+                  </p>
+                )}
+                {seqFeedback === "incorrect" && (
+                  <p className="text-center font-black text-xl text-rose-500 font-sans animate-shake mt-1">
+                    هذا ليس الحرف التالي في الترتيب الأبجدي.. جرب مرة أخرى! 🤔
+                  </p>
+                )}
+              </div>
+            ) : (
+              // Game Ended Celebration Screen
+              <div className="flex flex-col items-center justify-center text-center p-6 animate-fade-in max-w-md bg-white border-4 border-orange-200 rounded-3xl shadow-xl">
+                <div className="bg-amber-100 border-4 border-amber-300 rounded-full p-5 text-amber-500 mb-4 animate-bounce">
+                  <Trophy className="w-16 h-16" />
+                </div>
+                <h4 className="text-3xl font-black font-sans text-orange-950 mb-2">ممتاز يا بطل الأبجدية! 🏆👑</h4>
+                <p className="text-md text-slate-600 font-sans mb-4 leading-relaxed">
+                  لقد أكملت طريق الحروف العربية بالكامل من الألف إلى الياء بنجاح!
+                  أنت مبرمج الحروف العبقري وحققت <span className="text-orange-600 font-extrabold">28 من 28</span> نقطة كاملة! 🌟
+                  وحصلت على مكافأة إضافية <span className="text-amber-500 font-bold">+50 نجمة</span> ذهبية ساطعة. ⭐
+                </p>
+
+                <div className="mb-6 flex items-center gap-2 bg-orange-50 border-2 border-orange-300 text-orange-700 font-sans font-bold px-4 py-2 rounded-2xl shadow-sm">
+                  <Sparkles className="w-5 h-5 text-orange-500 animate-spin" />
+                  <span>حصلت على لقب: بطل الحروف الأول 👑</span>
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    onClick={startAlphabetSequenceGame}
+                    className="px-6 py-3 rounded-2xl bg-orange-500 border-b-4 border-orange-700 hover:bg-orange-600 text-white font-sans font-bold transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
+                  >
+                    <span>العب مرة أخرى 🔄</span>
                   </button>
                   <button
                     onClick={() => setActiveGame(null)}
