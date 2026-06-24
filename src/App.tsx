@@ -57,6 +57,7 @@ export default function App() {
   const [parentCodeInput, setParentCodeInput] = useState("");
   const [parentGateError, setParentGateError] = useState(false);
   const [parentGateSuccess, setParentGateSuccess] = useState(false);
+  const [parentGateAction, setParentGateAction] = useState<"exit_app" | "exit_fullscreen" | null>(null);
 
   const handleSwitchTab = (tab: "home" | "explorer" | "games" | "stories" | "print" | "rewards", initialGame: "balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | "alphabetSequence" | null = null) => {
     setActiveTab(tab);
@@ -67,7 +68,14 @@ export default function App() {
   // Fullscreen change listener to sync state with browser environment
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const isCurrentlyFullscreen = !!document.fullscreenElement;
+      
+      // If we were in fullscreen and exited natively (e.g. Escape key), and parent gate is not open
+      // pop up parent gate to protect the kid from playing outside full screen or leaving the app!
+      if (isFullscreen && !isCurrentlyFullscreen && !isParentGateOpen && !parentGateSuccess) {
+        handleOpenParentGate("exit_fullscreen");
+      }
+      setIsFullscreen(isCurrentlyFullscreen);
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
@@ -79,7 +87,7 @@ export default function App() {
       document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
       document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
     };
-  }, []);
+  }, [isFullscreen, isParentGateOpen, parentGateSuccess]);
 
   const handleToggleFullscreen = () => {
     audio.playPopSound();
@@ -92,24 +100,24 @@ export default function App() {
           setIsFullscreen(true);
         });
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen()
-          .then(() => setIsFullscreen(false))
-          .catch(() => setIsFullscreen(false));
-      } else {
-        setIsFullscreen(false);
-      }
+      // Trying to exit fullscreen! Parents Gate verification is required
+      handleOpenParentGate("exit_fullscreen");
     }
   };
 
-  const handleOpenParentGate = () => {
+  const handleOpenParentGate = (action: "exit_app" | "exit_fullscreen" = "exit_app") => {
     audio.playPopSound();
+    setParentGateAction(action);
     setParentCodeInput("");
     setParentGateError(false);
     setParentGateSuccess(false);
     setIsParentGateOpen(true);
     setTimeout(() => {
-      audio.speakArabic("بوابة الكبار! اطلب من الأب أو الأم إدخال رمز المرور ألفين وثلاثين لتأكيد الخروج.");
+      if (action === "exit_fullscreen") {
+        audio.speakArabic("بوابة الكبار! لتأكيد الخروج من وضع ملء الشاشة، يرجى إدخال رمز المرور ألفين وثلاثين.");
+      } else {
+        audio.speakArabic("بوابة الكبار! اطلب من الأب أو الأم إدخال رمز المرور ألفين وثلاثين لتأكيد الخروج.");
+      }
     }, 100);
   };
 
@@ -118,17 +126,33 @@ export default function App() {
       audio.playStarSound();
       setParentGateSuccess(true);
       setParentGateError(false);
-      audio.speakArabic("تم تأكيد الرمز بنجاح! شكراً لك يا بطل، إلى اللقاء في المرة القادمة!");
-      setTimeout(() => {
-        setIsParentGateOpen(false);
-        // Attempt exit / close or redirect
-        try {
-          window.location.href = "https://www.google.com";
-          window.close();
-        } catch (e) {
-          console.error("Window close ignored by browser, redirected.", e);
-        }
-      }, 2500);
+      
+      if (parentGateAction === "exit_fullscreen") {
+        audio.speakArabic("تم تأكيد الرمز بنجاح! تم تصغير الشاشة.");
+        setTimeout(() => {
+          setIsParentGateOpen(false);
+          setParentGateSuccess(false); // Reset success state for future usage
+          if (document.exitFullscreen) {
+            document.exitFullscreen()
+              .then(() => setIsFullscreen(false))
+              .catch(() => setIsFullscreen(false));
+          } else {
+            setIsFullscreen(false);
+          }
+        }, 2000);
+      } else {
+        audio.speakArabic("تم تأكيد الرمز بنجاح! شكراً لك يا بطل، إلى اللقاء في المرة القادمة!");
+        setTimeout(() => {
+          setIsParentGateOpen(false);
+          setParentGateSuccess(false); // Reset success state for future usage
+          try {
+            window.location.href = "https://www.google.com";
+            window.close();
+          } catch (e) {
+            console.error("Window close ignored by browser, redirected.", e);
+          }
+        }, 2500);
+      }
     } else {
       audio.playBuzzerSound();
       setParentGateError(true);
@@ -1029,6 +1053,11 @@ export default function App() {
                 onClick={() => {
                   audio.playPopSound();
                   setIsParentGateOpen(false);
+                  if (parentGateAction === "exit_fullscreen" && !document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch((err) => {
+                      console.error("Re-entering fullscreen failed:", err);
+                    });
+                  }
                 }}
                 className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl cursor-pointer active:scale-95 transition-all text-sm border-b-4 border-slate-300 text-center"
               >
