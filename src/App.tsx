@@ -52,11 +52,89 @@ export default function App() {
   const [selectedLetter, setSelectedLetter] = useState<Letter | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [initialGameToLaunch, setInitialGameToLaunch] = useState<"balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | "alphabetSequence" | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isParentGateOpen, setIsParentGateOpen] = useState(false);
+  const [parentCodeInput, setParentCodeInput] = useState("");
+  const [parentGateError, setParentGateError] = useState(false);
+  const [parentGateSuccess, setParentGateSuccess] = useState(false);
 
   const handleSwitchTab = (tab: "home" | "explorer" | "games" | "stories" | "print" | "rewards", initialGame: "balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | "alphabetSequence" | null = null) => {
     setActiveTab(tab);
     setInitialGameToLaunch(initialGame);
     audio.playPopSound();
+  };
+
+  // Fullscreen change listener to sync state with browser environment
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
+    };
+  }, []);
+
+  const handleToggleFullscreen = () => {
+    audio.playPopSound();
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch((err) => {
+          console.error("Fullscreen request failed", err);
+          // Fallback alert / visual simulation if browser blocks it (e.g. if in iframe)
+          setIsFullscreen(true);
+        });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen()
+          .then(() => setIsFullscreen(false))
+          .catch(() => setIsFullscreen(false));
+      } else {
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  const handleOpenParentGate = () => {
+    audio.playPopSound();
+    setParentCodeInput("");
+    setParentGateError(false);
+    setParentGateSuccess(false);
+    setIsParentGateOpen(true);
+    setTimeout(() => {
+      audio.speakArabic("بوابة الكبار! اطلب من الأب أو الأم إدخال رمز المرور ألفين وثلاثين لتأكيد الخروج.");
+    }, 100);
+  };
+
+  const handleParentGateSubmit = (inputCode = parentCodeInput) => {
+    if (inputCode === "2030") {
+      audio.playStarSound();
+      setParentGateSuccess(true);
+      setParentGateError(false);
+      audio.speakArabic("تم تأكيد الرمز بنجاح! شكراً لك يا بطل، إلى اللقاء في المرة القادمة!");
+      setTimeout(() => {
+        setIsParentGateOpen(false);
+        // Attempt exit / close or redirect
+        try {
+          window.location.href = "https://www.google.com";
+          window.close();
+        } catch (e) {
+          console.error("Window close ignored by browser, redirected.", e);
+        }
+      }, 2500);
+    } else {
+      audio.playBuzzerSound();
+      setParentGateError(true);
+      setParentCodeInput("");
+      audio.speakArabic("رمز المرور غير صحيح! يرجى المحاولة مرة أخرى.");
+    }
   };
 
   // Load progress from localStorage
@@ -367,6 +445,26 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Fullscreen Button */}
+            <button
+              onClick={handleToggleFullscreen}
+              className="bg-sky-100 hover:bg-sky-200 text-sky-700 font-extrabold py-2 px-4 rounded-full shadow-sm flex items-center gap-1.5 text-xs transition-all active:scale-95 cursor-pointer border border-sky-200"
+              title={isFullscreen ? "تصغير الشاشة" : "ملء الشاشة"}
+            >
+              <span>{isFullscreen ? "🗗" : "📺"}</span>
+              <span className="hidden lg:inline">{isFullscreen ? "شاشة عادية" : "كامل الشاشة"}</span>
+            </button>
+
+            {/* Parent Exit Button */}
+            <button
+              onClick={handleOpenParentGate}
+              className="bg-rose-100 hover:bg-rose-200 text-rose-700 font-extrabold py-2 px-4 rounded-full shadow-sm flex items-center gap-1.5 text-xs transition-all active:scale-95 cursor-pointer border border-rose-200"
+              title="خروج الأمان للآباء"
+            >
+              <span>🚪</span>
+              <span className="hidden lg:inline">خروج</span>
+            </button>
+
             <button
               onClick={() => { setActiveTab("print"); audio.playPopSound(); }}
               className="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-5 rounded-full shadow-md shadow-rose-200 flex items-center gap-2 text-sm transition-all active:scale-95 cursor-pointer"
@@ -508,6 +606,28 @@ export default function App() {
             }`}
           >
             🏆 صندوق الأوسمة والإنجازات
+          </button>
+          
+          <div className="h-1 w-full bg-slate-100 my-1 rounded-full" />
+          
+          <button
+            onClick={() => { handleToggleFullscreen(); setMobileMenuOpen(false); }}
+            className="w-full py-3 px-4 rounded-xl font-black font-sans text-right text-sky-700 bg-sky-50 hover:bg-sky-100 flex items-center justify-between transition-colors border-b-2 border-sky-200"
+          >
+            <span>📺 تفعيل وضع ملء الشاشة</span>
+            <span className="text-xs bg-sky-200 text-sky-800 px-2 py-0.5 rounded-md font-bold">
+              {isFullscreen ? "نشط 🗗" : "تكبير الشاشة 📱"}
+            </span>
+          </button>
+          
+          <button
+            onClick={() => { handleOpenParentGate(); setMobileMenuOpen(false); }}
+            className="w-full py-3 px-4 rounded-xl font-black font-sans text-right text-rose-700 bg-rose-50 hover:bg-rose-100 flex items-center justify-between transition-colors border-b-2 border-rose-200"
+          >
+            <span>🚪 خروج من الموقع للأطفال</span>
+            <span className="text-xs bg-rose-200 text-rose-800 px-2.5 py-0.5 rounded-md font-bold flex items-center gap-1">
+              حماية الكبار 🔐
+            </span>
           </button>
         </div>
       )}
@@ -781,6 +901,151 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Parents Gate Security Modal */}
+      {isParentGateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md no-print animate-fade-in" dir="rtl">
+          <div className="bg-white rounded-[32px] border-r-8 border-b-8 border-orange-400 p-6 md:p-8 max-w-md w-full shadow-2xl relative overflow-hidden flex flex-col items-center">
+            
+            {/* Top decorative lock icon */}
+            <div className="w-16 h-16 bg-gradient-to-tr from-orange-400 to-amber-500 rounded-2xl flex items-center justify-center text-white text-3xl shadow-lg shadow-orange-100 mb-4 animate-bounce">
+              🔐
+            </div>
+            
+            <h3 className="text-xl md:text-2xl font-black font-sans text-orange-950 text-center">
+              بوابة الأمان للآباء والأمهات
+            </h3>
+            
+            <p className="text-sm font-bold text-slate-500 text-center mt-2 leading-relaxed">
+              يرجى كتابة رمز المرور الرقمي لتأكيد الخروج من الموقع وحماية الأطفال من المغادرة غير المقصودة.
+            </p>
+
+            {/* Hint overlay explicitly requested */}
+            <div className="mt-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-black font-mono py-2 px-4 rounded-xl text-center w-full shadow-inner animate-pulse">
+              💡 تلميح للأمهات والآباء: اكتب الرمز <span className="text-sm underline font-extrabold text-orange-600">2030</span>
+            </div>
+
+            {/* Input field showing digits with fun balloons or placeholders */}
+            <div className="w-full mt-5">
+              <div className="flex justify-center gap-2 mb-4">
+                {[0, 1, 2, 3].map((index) => {
+                  const val = parentCodeInput[index] || "";
+                  return (
+                    <div 
+                      key={index} 
+                      className={`w-12 h-14 rounded-2xl border-4 flex items-center justify-center text-2xl font-black transition-all ${
+                        parentGateError 
+                          ? "border-red-400 bg-red-50 text-red-600 animate-shake" 
+                          : parentGateSuccess 
+                            ? "border-green-400 bg-green-50 text-green-600" 
+                            : val 
+                              ? "border-orange-400 bg-orange-50 text-orange-800" 
+                              : "border-slate-200 bg-slate-50 text-slate-300"
+                      }`}
+                    >
+                      {val ? "●" : ""}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {parentGateError && (
+                <p className="text-xs text-red-600 font-bold text-center mb-4 animate-bounce">
+                  ❌ الرمز غير صحيح! حاول مرة أخرى.
+                </p>
+              )}
+
+              {parentGateSuccess && (
+                <p className="text-xs text-green-600 font-bold text-center mb-4 animate-pulse">
+                  ✅ تم التحقق بنجاح! نراك قريباً...
+                </p>
+              )}
+
+              {/* Secure visual numeric keypad for mobile/tablet */}
+              <div className="grid grid-cols-3 gap-2 w-full max-w-[280px] mx-auto mb-5">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => {
+                      if (parentCodeInput.length < 4) {
+                        const nextCode = parentCodeInput + num;
+                        setParentCodeInput(nextCode);
+                        audio.playPopSound();
+                        if (nextCode.length === 4) {
+                          handleParentGateSubmit(nextCode);
+                        }
+                      }
+                    }}
+                    disabled={parentGateSuccess}
+                    className="h-12 bg-slate-100 hover:bg-orange-100 active:scale-95 disabled:opacity-50 text-lg font-black text-slate-700 hover:text-orange-800 rounded-xl transition-all cursor-pointer border-b-4 border-slate-200 hover:border-orange-300"
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    setParentCodeInput("");
+                    audio.playPopSound();
+                  }}
+                  disabled={parentGateSuccess}
+                  className="h-12 bg-rose-50 hover:bg-rose-100 active:scale-95 disabled:opacity-50 text-xs font-extrabold text-rose-600 rounded-xl transition-all cursor-pointer border-b-4 border-rose-200 flex items-center justify-center"
+                >
+                  مسح
+                </button>
+                <button
+                  onClick={() => {
+                    if (parentCodeInput.length < 4) {
+                      const nextCode = parentCodeInput + "0";
+                      setParentCodeInput(nextCode);
+                      audio.playPopSound();
+                      if (nextCode.length === 4) {
+                        handleParentGateSubmit(nextCode);
+                      }
+                    }
+                  }}
+                  disabled={parentGateSuccess}
+                  className="h-12 bg-slate-100 hover:bg-orange-100 active:scale-95 disabled:opacity-50 text-lg font-black text-slate-700 hover:text-orange-800 rounded-xl transition-all cursor-pointer border-b-4 border-slate-200 hover:border-orange-300"
+                >
+                  0
+                </button>
+                <button
+                  onClick={() => {
+                    if (parentCodeInput.length > 0) {
+                      setParentCodeInput(parentCodeInput.slice(0, -1));
+                      audio.playPopSound();
+                    }
+                  }}
+                  disabled={parentGateSuccess}
+                  className="h-12 bg-amber-50 hover:bg-amber-100 active:scale-95 disabled:opacity-50 text-xs font-extrabold text-amber-700 rounded-xl transition-all cursor-pointer border-b-4 border-amber-200 flex items-center justify-center"
+                >
+                  حذف
+                </button>
+              </div>
+            </div>
+
+            {/* Modal actions */}
+            <div className="flex gap-3 w-full mt-2">
+              <button
+                onClick={() => {
+                  audio.playPopSound();
+                  setIsParentGateOpen(false);
+                }}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl cursor-pointer active:scale-95 transition-all text-sm border-b-4 border-slate-300 text-center"
+              >
+                رجوع للعب 🎮
+              </button>
+              <button
+                onClick={() => handleParentGateSubmit()}
+                disabled={parentCodeInput.length < 4 || parentGateSuccess}
+                className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-extrabold rounded-2xl cursor-pointer active:scale-95 transition-all text-sm border-b-4 border-orange-700 text-center"
+              >
+                تأكيد الخروج 🚪
+              </button>
+            </div>
+            
+          </div>
+        </div>
+      )}
     </div>
   );
 }
