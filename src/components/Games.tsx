@@ -36,7 +36,167 @@ interface Balloon {
 }
 
 export default function Games({ progress, onUpdateStars, onUpdateHighScore }: GamesProps) {
-  const [activeGame, setActiveGame] = useState<"balloon" | "matching" | "quiz" | "oddOneOut" | null>(null);
+  const [activeGame, setActiveGame] = useState<"balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | null>(null);
+
+  // --- LETTER ORDERING GAME STATE ---
+  interface OrderingQuestion {
+    correctLetters: Letter[]; // 3 consecutive letters in alphabetical order
+    shuffledLetters: Letter[]; // same 3 letters but shuffled
+  }
+  const [orderingScore, setOrderingScore] = useState(0);
+  const [orderingQuestionIndex, setOrderingQuestionIndex] = useState(0);
+  const [orderingQuestions, setOrderingQuestions] = useState<OrderingQuestion[]>([]);
+  const [orderingFinished, setOrderingFinished] = useState(false);
+  const [placedLetters, setPlacedLetters] = useState<(Letter | null)[]>([null, null, null]); // 3 slots
+  const [orderingFeedback, setOrderingFeedback] = useState<"correct" | "incorrect" | null>(null);
+  const [orderingHighScore, setOrderingHighScore] = useState<number>(() => {
+    const saved = localStorage.getItem("ordering_high_score");
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  const startOrderingGame = () => {
+    setOrderingScore(0);
+    setOrderingQuestionIndex(0);
+    setOrderingFinished(false);
+    setOrderingFeedback(null);
+    setPlacedLetters([null, null, null]);
+    setActiveGame("letterOrdering");
+
+    // Generate 5 questions. Each is 3 consecutive letters.
+    const generated: OrderingQuestion[] = [];
+    const usedIndices = new Set<number>();
+
+    while (generated.length < 5) {
+      // Index of first letter: between 0 and 25 (since we need 3 letters)
+      const firstIndex = Math.floor(Math.random() * (ARABIC_LETTERS.length - 2));
+      if (!usedIndices.has(firstIndex)) {
+        usedIndices.add(firstIndex);
+        const correctLetters = [
+          ARABIC_LETTERS[firstIndex],
+          ARABIC_LETTERS[firstIndex + 1],
+          ARABIC_LETTERS[firstIndex + 2]
+        ];
+        
+        // Shuffle letters ensuring they are not in perfect alphabetical order
+        let shuffledLetters = [...correctLetters].sort(() => Math.random() - 0.5);
+        if (
+          shuffledLetters[0].id === correctLetters[0].id &&
+          shuffledLetters[1].id === correctLetters[1].id &&
+          shuffledLetters[2].id === correctLetters[2].id
+        ) {
+          shuffledLetters = [correctLetters[1], correctLetters[2], correctLetters[0]];
+        }
+
+        generated.push({
+          correctLetters,
+          shuffledLetters
+        });
+      }
+    }
+
+    setOrderingQuestions(generated);
+
+    // Speak introduction
+    setTimeout(() => {
+      audio.speakArabic("لُعْبَةُ تَرْتِيبِ الْحُرُوفِ السَّرِيعْ! رَتِّبِ الْحُرُوفَ الثَّلَاثَةَ تَرْتِيبًا صَحِيحًا فِي الْقِطَارِ مِنَ الْيَمِينِ إِلَى الْيَسَارْ.");
+    }, 400);
+  };
+
+  const handleSelectLetterToPlace = (letter: Letter) => {
+    if (orderingFeedback !== null || orderingFinished) return;
+    
+    // Find first empty slot in placedLetters
+    const emptyIndex = placedLetters.indexOf(null);
+    if (emptyIndex === -1) return; // all slots filled
+
+    audio.playPopSound();
+    audio.speakArabic(letter.char);
+
+    const newPlaced = [...placedLetters];
+    newPlaced[emptyIndex] = letter;
+    setPlacedLetters(newPlaced);
+
+    // If all slots are filled now, check if correct!
+    if (newPlaced.every(l => l !== null)) {
+      checkOrdering(newPlaced as Letter[]);
+    }
+  };
+
+  const handleRemovePlacedLetter = (slotIndex: number) => {
+    if (orderingFeedback !== null || orderingFinished) return;
+    if (placedLetters[slotIndex] === null) return;
+
+    audio.playPopSound();
+    const newPlaced = [...placedLetters];
+    newPlaced[slotIndex] = null;
+    setPlacedLetters(newPlaced);
+  };
+
+  const checkOrdering = (placed: Letter[]) => {
+    const currentQ = orderingQuestions[orderingQuestionIndex];
+    // RTL ordering validation:
+    // Placed is [slot 0, slot 1, slot 2].
+    // Since we are reading/arranging from right-to-left,
+    // slot 0 (first filled) should correspond to the first letter in correctLetters,
+    // slot 1 -> second, slot 2 -> third.
+    const isCorrect = 
+      placed[0].id === currentQ.correctLetters[0].id &&
+      placed[1].id === currentQ.correctLetters[1].id &&
+      placed[2].id === currentQ.correctLetters[2].id;
+
+    if (isCorrect) {
+      audio.playPopSound();
+      audio.playStarSound();
+      setOrderingScore(prev => prev + 1);
+      setOrderingFeedback("correct");
+      onUpdateStars(5);
+
+      setTimeout(() => {
+        audio.speakArabic("أَحْسَنْتَ! تَرْتِيبٌ صَحِيحٌ مِئَةً بِالْمِئَةْ!");
+      }, 150);
+
+      setTimeout(() => {
+        if (orderingQuestionIndex < 4) {
+          setOrderingQuestionIndex(prev => prev + 1);
+          setPlacedLetters([null, null, null]);
+          setOrderingFeedback(null);
+          // Play sound for the next round
+          const nextIndex = orderingQuestionIndex + 1;
+          audio.speakArabic("رَتِّبْ الْحُرُوفَ التَّالِيَة يَا شَاطِرْ.");
+        } else {
+          endOrderingGame(orderingScore + 1);
+        }
+      }, 2500);
+    } else {
+      audio.playBuzzerSound();
+      setOrderingFeedback("incorrect");
+      setTimeout(() => {
+        audio.speakArabic("هَذَا التَّرْتِيبُ لَيْسَ صَحِيحًا بَعْدُ، حَاوِلْ مَرَّةً أُخْرَى يَا بَطَلْ!");
+      }, 150);
+
+      // Reset the slots after a short delay to let them try again
+      setTimeout(() => {
+        setPlacedLetters([null, null, null]);
+        setOrderingFeedback(null);
+      }, 2000);
+    }
+  };
+
+  const endOrderingGame = (finalScore: number) => {
+    setOrderingFinished(true);
+    audio.playCheerSound();
+
+    if (finalScore > orderingHighScore) {
+      setOrderingHighScore(finalScore);
+      localStorage.setItem("ordering_high_score", finalScore.toString());
+    }
+
+    onUpdateStars(15);
+
+    setTimeout(() => {
+      audio.speakArabic(`عَمَلٌ مُمْتَاز! لَقَدْ أَنْهَيْتَ لُعْبَةَ تَرْتِيبِ الْحُرُوفِ الْعَرَبِيَّةِ وَحَصَلْتَ عَلَى ${finalScore} نِقَاط!`);
+    }, 800);
+  };
 
   // --- ODD ONE OUT GAME STATE ---
   interface OddQuestion {
@@ -604,7 +764,7 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
             العب مع الحروف السحرية، طابق الصور بالكلمات، واجتز مسابقة التحدي لتجمع النجوم وتحصل على كؤوس الفوز المذهلة! 🏆
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl w-full">
             {/* Game 1: Balloon Pop */}
             <button
               onClick={startBalloonGame}
@@ -641,7 +801,7 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
               </div>
             </button>
 
-            {/* Game 3: Quiz Game (NEW!) */}
+            {/* Game 3: Quiz Game */}
             <button
               onClick={startQuizGame}
               className="flex flex-col items-center p-6 rounded-3xl bg-white border-4 border-b-8 border-violet-100 hover:border-violet-300 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-center group cursor-pointer"
@@ -659,7 +819,7 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
               </div>
             </button>
 
-            {/* Game 4: Find the Odd Letter Game (NEW!) */}
+            {/* Game 4: Find the Odd Letter Game */}
             <button
               onClick={startOddGame}
               className="flex flex-col items-center p-6 rounded-3xl bg-white border-4 border-b-8 border-emerald-100 hover:border-emerald-300 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-center group cursor-pointer"
@@ -674,6 +834,24 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
               <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100">
                 <Trophy className="w-3.5 h-3.5" />
                 <span>أعلى مجموع نقاط: {oddHighScore} / 5</span>
+              </div>
+            </button>
+
+            {/* Game 5: Letter Ordering Game (NEW!) */}
+            <button
+              onClick={startOrderingGame}
+              className="flex flex-col items-center p-6 rounded-3xl bg-white border-4 border-b-8 border-amber-100 hover:border-amber-300 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-center group cursor-pointer"
+            >
+              <span className="text-5xl mb-3 animate-pulse">🚂</span>
+              <h3 className="text-xl font-black font-sans text-amber-600 mb-2 group-hover:scale-105 transition-transform">
+                ترتيب الحروف متتالية
+              </h3>
+              <p className="text-xs text-slate-500 font-sans leading-relaxed flex-1">
+                رتب الحروف السريعة الثلاثة المتجاورة في قطار الحروف ترتيباً صحيحاً من اليمين إلى اليسار واكسب الجوائز!
+              </p>
+              <div className="mt-5 flex items-center gap-1.5 text-xs font-bold font-sans text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-100">
+                <Trophy className="w-3.5 h-3.5" />
+                <span>أعلى مجموع نقاط: {orderingHighScore} / 5</span>
               </div>
             </button>
           </div>
@@ -1018,6 +1196,231 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
                   <button
                     onClick={startQuizGame}
                     className="px-6 py-3 rounded-2xl bg-violet-600 border-b-4 border-violet-800 hover:bg-violet-700 text-white font-sans font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    العب مرة أخرى 🔄
+                  </button>
+                  <button
+                    onClick={() => setActiveGame(null)}
+                    className="px-6 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-sans font-bold transition-all cursor-pointer"
+                  >
+                    الخروج للرئيسية 🚪
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : activeGame === "letterOrdering" ? (
+        // --- LETTER ORDERING GAME PLAY UI ---
+        <div className="flex-1 flex flex-col bg-white rounded-3xl border-4 border-amber-100 shadow-lg overflow-hidden relative" id="ordering-game-panel">
+          {/* Header Stats bar */}
+          <div className="bg-amber-50/50 border-b border-amber-100 px-6 py-4 flex flex-wrap gap-4 items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🚂</span>
+              <h3 className="text-xl font-extrabold font-sans text-amber-600">ترتيب الحروف متتالية</h3>
+            </div>
+
+            {/* Question Progress Tracker */}
+            {!orderingFinished && orderingQuestions.length > 0 && (
+              <div className="bg-amber-100 border border-amber-200 px-4 py-1.5 rounded-full text-amber-800 font-black text-xs font-sans">
+                سؤال {orderingQuestionIndex + 1} من 5
+              </div>
+            )}
+
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+                <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                <span className="font-mono font-bold text-amber-700 text-sm">النقاط: {orderingScore}</span>
+              </div>
+              <button
+                onClick={startOrderingGame}
+                className="p-1.5 rounded-xl bg-white border border-amber-200 text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
+                title="إعادة بدء اللعبة"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Active Game Area */}
+          <div className="flex-1 p-6 bg-gradient-to-b from-amber-50/20 to-orange-100/10 flex flex-col items-center justify-center min-h-[380px]">
+            {!orderingFinished && orderingQuestions.length > 0 ? (
+              <div className="w-full max-w-2xl flex flex-col gap-8" id="active-ordering-card">
+                {/* Clue Prompt Card */}
+                <div className="bg-white border-4 border-b-8 border-amber-200 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between shadow-md relative overflow-hidden text-right">
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-amber-100/40 rounded-full translate-x-1/3 -translate-y-1/3" />
+                  
+                  <div className="flex-1">
+                    <h4 className="text-md font-bold font-sans text-slate-500 mb-1">ساعد القطار السريع! 🚂</h4>
+                    <p className="text-xl md:text-2xl font-black font-sans text-slate-900 leading-relaxed">
+                      رَتِّبِ الْحُرُوفَ الثَّلَاثَةَ الْمُتَجَاوِرَةَ فِي عَرَبَاتِ الْقِطَارِ مِنَ الْيَمِينِ إِلَى الْيَسَارْ! 🚂
+                    </p>
+                    {/* Vocal Repeat button */}
+                    <button
+                      onClick={() => audio.speakArabic("رَتِّبِ الْحُرُوفَ الثَّلَاثَةَ تَرْتِيبًا صَحِيحًا فِي الْقِطَارِ مِنَ الْيَمِينِ إِلَى الْيَسَارْ.")}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-100 text-xs font-bold font-sans cursor-pointer"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>استمع للتوجيه 🔊</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Train Stage - Visual Slots */}
+                <div className="flex flex-col items-center gap-4 bg-slate-100/50 p-6 rounded-3xl border-2 border-slate-200/60 shadow-inner">
+                  <span className="text-xs font-black font-sans text-slate-500">سكة حديد قطار الحروف 🛤️</span>
+                  
+                  {/* The Train Structure */}
+                  <div className="flex flex-row-reverse flex-wrap items-center justify-center gap-4 py-4 w-full">
+                    {/* Locomotive (at the right because of RTL motion direction) */}
+                    <div className="flex flex-col items-center justify-center bg-amber-500 text-white p-4 rounded-3xl border-4 border-amber-600 shadow-md w-24 h-24 relative select-none">
+                      <span className="text-4xl animate-bounce">🚂</span>
+                      <span className="text-[10px] font-black font-sans">الْقِطَار</span>
+                      {/* Wheels */}
+                      <div className="absolute -bottom-2 left-3 w-5 h-5 bg-slate-800 rounded-full border-2 border-white" />
+                      <div className="absolute -bottom-2 right-3 w-5 h-5 bg-slate-800 rounded-full border-2 border-white" />
+                    </div>
+
+                    {/* Chain Link */}
+                    <div className="hidden sm:block w-4 h-2 bg-slate-400 rounded-full" />
+
+                    {/* Slot 0 (Rightmost, first letter in sequence) */}
+                    <button
+                      onClick={() => handleRemovePlacedLetter(0)}
+                      className={`w-24 h-24 rounded-3xl border-4 border-dashed flex flex-col items-center justify-center relative transition-all duration-300 ${
+                        placedLetters[0]
+                          ? "bg-amber-100 border-amber-400 text-amber-800 scale-100 cursor-pointer active:scale-95"
+                          : "bg-white border-slate-300 text-slate-400 hover:border-amber-300 hover:bg-amber-50/50"
+                      }`}
+                    >
+                      {placedLetters[0] ? (
+                        <span className="text-4xl font-black font-sans">{placedLetters[0].char}</span>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs font-black font-sans text-slate-500">الْأَوَّل</span>
+                          <span className="text-lg">➊</span>
+                        </div>
+                      )}
+                      <div className="absolute -bottom-2 left-3 w-5 h-5 bg-slate-800 rounded-full border-2 border-white" />
+                      <div className="absolute -bottom-2 right-3 w-5 h-5 bg-slate-800 rounded-full border-2 border-white" />
+                    </button>
+
+                    {/* Chain Link */}
+                    <div className="hidden sm:block w-4 h-2 bg-slate-400 rounded-full" />
+
+                    {/* Slot 1 (Middle, second letter in sequence) */}
+                    <button
+                      onClick={() => handleRemovePlacedLetter(1)}
+                      className={`w-24 h-24 rounded-3xl border-4 border-dashed flex flex-col items-center justify-center relative transition-all duration-300 ${
+                        placedLetters[1]
+                          ? "bg-amber-100 border-amber-400 text-amber-800 scale-100 cursor-pointer active:scale-95"
+                          : "bg-white border-slate-300 text-slate-400 hover:border-amber-300 hover:bg-amber-50/50"
+                      }`}
+                    >
+                      {placedLetters[1] ? (
+                        <span className="text-4xl font-black font-sans">{placedLetters[1].char}</span>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs font-black font-sans text-slate-500">الثَّانِي</span>
+                          <span className="text-lg">➋</span>
+                        </div>
+                      )}
+                      <div className="absolute -bottom-2 left-3 w-5 h-5 bg-slate-800 rounded-full border-2 border-white" />
+                      <div className="absolute -bottom-2 right-3 w-5 h-5 bg-slate-800 rounded-full border-2 border-white" />
+                    </button>
+
+                    {/* Chain Link */}
+                    <div className="hidden sm:block w-4 h-2 bg-slate-400 rounded-full" />
+
+                    {/* Slot 2 (Leftmost, third letter in sequence) */}
+                    <button
+                      onClick={() => handleRemovePlacedLetter(2)}
+                      className={`w-24 h-24 rounded-3xl border-4 border-dashed flex flex-col items-center justify-center relative transition-all duration-300 ${
+                        placedLetters[2]
+                          ? "bg-amber-100 border-amber-400 text-amber-800 scale-100 cursor-pointer active:scale-95"
+                          : "bg-white border-slate-300 text-slate-400 hover:border-amber-300 hover:bg-amber-50/50"
+                      }`}
+                    >
+                      {placedLetters[2] ? (
+                        <span className="text-4xl font-black font-sans">{placedLetters[2].char}</span>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs font-black font-sans text-slate-500">الثَّالِث</span>
+                          <span className="text-lg">➌</span>
+                        </div>
+                      )}
+                      <div className="absolute -bottom-2 left-3 w-5 h-5 bg-slate-800 rounded-full border-2 border-white" />
+                      <div className="absolute -bottom-2 right-3 w-5 h-5 bg-slate-800 rounded-full border-2 border-white" />
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-500 font-sans mt-2">
+                    * اضغط على عربة ممتلئة لإخراج الحرف وإعادة اختياره!
+                  </p>
+                </div>
+
+                {/* Shuffled Letters Pool */}
+                <div className="flex flex-col items-center gap-3">
+                  <span className="text-sm font-black font-sans text-slate-600 bg-amber-100/60 px-4 py-1.5 rounded-full border border-amber-200">
+                    اختر الحروف وضعها بالترتيب الصحيح:
+                  </span>
+                  
+                  <div className="flex items-center justify-center gap-6">
+                    {orderingQuestions[orderingQuestionIndex].shuffledLetters.map((letter) => {
+                      const isPlaced = placedLetters.some(l => l && l.id === letter.id);
+                      return (
+                        <button
+                          key={letter.id}
+                          onClick={() => handleSelectLetterToPlace(letter)}
+                          disabled={isPlaced}
+                          className={`w-20 h-20 rounded-full border-4 border-b-8 flex flex-col items-center justify-center transition-all duration-300 shadow-md font-sans font-black text-3xl cursor-pointer select-none relative ${
+                            isPlaced
+                              ? "bg-slate-100 border-slate-200 text-slate-300 opacity-40 scale-90"
+                              : `${letter.color} ${letter.borderColor} ${letter.textColor} hover:scale-110 active:scale-95`
+                          }`}
+                        >
+                          <span>{letter.char}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Instant Feedback Overlay Text */}
+                {orderingFeedback === "correct" && (
+                  <p className="text-center font-black text-xl text-emerald-600 font-sans animate-bounce mt-2">
+                    رائع جداً! ترتيبك صحيح وصاحب العقل الذكي! 🌟🎉 (+5 نجوم)
+                  </p>
+                )}
+                {orderingFeedback === "incorrect" && (
+                  <p className="text-center font-black text-xl text-rose-500 font-sans animate-shake mt-2">
+                    الترتيب ليس صحيحاً.. حاول ترتيبها جيداً من اليمين إلى اليسار! 🤔
+                  </p>
+                )}
+              </div>
+            ) : (
+              // Game Ended Screen
+              <div className="flex flex-col items-center justify-center text-center p-6 animate-fade-in max-w-sm">
+                <div className="bg-amber-100 border-4 border-amber-300 rounded-full p-5 text-amber-500 mb-4 animate-bounce">
+                  <Trophy className="w-16 h-16" />
+                </div>
+                <h4 className="text-3xl font-black font-sans text-amber-950 mb-2">ممتاز يا مهندس الحروف! 🏆</h4>
+                <p className="text-md text-slate-600 font-sans mb-4 leading-relaxed">
+                  لقد رتبت جميع الحروف في القطار بنجاح وحققت <span className="text-amber-600 font-extrabold">{orderingScore} من 5</span> نقاط كاملة!
+                  وحصلت على مكافأة إضافية <span className="text-amber-500 font-bold">+{orderingScore * 5 + 15} نجوم</span> ذهبية ساطعة. ⭐
+                </p>
+
+                {orderingScore > orderingHighScore && (
+                  <div className="mb-6 flex items-center gap-2 bg-amber-50 border-2 border-amber-300 text-amber-700 font-sans font-bold px-4 py-2 rounded-2xl shadow-sm">
+                    <Sparkles className="w-5 h-5 text-amber-500" />
+                    <span>رقم قياسي جديد في قطار الحروف! 🏆</span>
+                  </div>
+                )}
+
+                <div className="flex gap-4">
+                  <button
+                    onClick={startOrderingGame}
+                    className="px-6 py-3 rounded-2xl bg-amber-500 border-b-4 border-amber-700 hover:bg-amber-600 text-white font-sans font-bold transition-all shadow-md active:scale-95 cursor-pointer"
                   >
                     العب مرة أخرى 🔄
                   </button>
