@@ -1,0 +1,8 @@
+{
+  "name": "اللغة العربية kg1",
+  "description": "An interactive Arabic alphabet learning application for KG1 kids featuring speech synthesis, handwriting practice, educational games, reward tracking, and printable worksheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
