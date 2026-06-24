@@ -529,7 +529,7 @@ export default function PrintSheet({ onUpdateStars }: PrintSheetProps) {
                 </span>
 
                 {/* Draw Canvas */}
-                <div className="w-full bg-white rounded-xl border border-slate-200 overflow-hidden mt-6 shadow-inner relative flex items-center justify-center">
+                <div className="w-full bg-white rounded-xl border border-slate-200 overflow-hidden mt-6 shadow-inner relative flex items-center justify-center touch-none">
                   <canvas
                     ref={colorCanvasRef}
                     width={500}
@@ -541,7 +541,7 @@ export default function PrintSheet({ onUpdateStars }: PrintSheetProps) {
                     onTouchStart={startColoring}
                     onTouchMove={drawColoring}
                     onTouchEnd={stopColoring}
-                    className="cursor-crosshair w-full block bg-white"
+                    className="cursor-crosshair w-full block bg-white touch-none"
                   />
                 </div>
 
@@ -610,7 +610,7 @@ export default function PrintSheet({ onUpdateStars }: PrintSheetProps) {
               </div>
 
               {/* Tracing Area Canvas */}
-              <div className="w-full bg-white rounded-xl border border-slate-200 shadow-inner overflow-hidden">
+              <div className="w-full bg-white rounded-xl border border-slate-200 shadow-inner overflow-hidden touch-none">
                 <canvas
                   ref={traceCanvasRef}
                   width={800}
@@ -622,7 +622,7 @@ export default function PrintSheet({ onUpdateStars }: PrintSheetProps) {
                   onTouchStart={startTracing}
                   onTouchMove={drawTracing}
                   onTouchEnd={stopTracing}
-                  className="cursor-crosshair w-full block bg-white"
+                  className="cursor-crosshair w-full block bg-white touch-none"
                 />
               </div>
             </div>

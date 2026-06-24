@@ -252,7 +252,7 @@ export default function TraceCanvas({ letter, onSuccess }: TraceCanvasProps) {
       </div>
 
       {/* Canvas Area with Letter Guide */}
-      <div className="flex-1 relative min-h-[300px] bg-slate-50/50 cursor-crosshair">
+      <div className="flex-1 relative min-h-[300px] bg-slate-50/50 cursor-crosshair touch-none">
         <canvas
           ref={canvasRef}
           onMouseDown={startDrawing}
@@ -262,7 +262,7 @@ export default function TraceCanvas({ letter, onSuccess }: TraceCanvasProps) {
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
-          className="absolute inset-0 w-full h-full block"
+          className="absolute inset-0 w-full h-full block touch-none"
         />
 
         {/* Floating guidance label */}
