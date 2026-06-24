@@ -22,6 +22,7 @@ interface GamesProps {
   };
   onUpdateStars: (starsEarned: number) => void;
   onUpdateHighScore: (game: "balloon" | "matching", score: number) => void;
+  initialGame?: "balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | "alphabetSequence" | null;
 }
 
 // Interfaces for Balloon pop game
@@ -35,8 +36,8 @@ interface Balloon {
   size: number;
 }
 
-export default function Games({ progress, onUpdateStars, onUpdateHighScore }: GamesProps) {
-  const [activeGame, setActiveGame] = useState<"balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | null>(null);
+export default function Games({ progress, onUpdateStars, onUpdateHighScore, initialGame = null }: GamesProps) {
+  const [activeGame, setActiveGame] = useState<"balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | "alphabetSequence" | null>(initialGame);
 
   // --- LETTER ORDERING GAME STATE ---
   interface OrderingQuestion {
@@ -743,6 +744,23 @@ export default function Games({ progress, onUpdateStars, onUpdateHighScore }: Ga
 
     setBalloons(newBalloons);
   };
+
+  // Launch requested initial game on mount/prop change
+  useEffect(() => {
+    if (initialGame === "alphabetSequence") {
+      startAlphabetSequenceGame();
+    } else if (initialGame === "letterOrdering") {
+      startOrderingGame();
+    } else if (initialGame === "balloon") {
+      startBalloonGame();
+    } else if (initialGame === "matching") {
+      startMatchingGame();
+    } else if (initialGame === "quiz") {
+      startQuizGame();
+    } else if (initialGame === "oddOneOut") {
+      startOddGame();
+    }
+  }, [initialGame]);
 
   // Game timer loop
   useEffect(() => {

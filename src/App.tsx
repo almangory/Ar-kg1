@@ -51,6 +51,13 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedLetter, setSelectedLetter] = useState<Letter | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [initialGameToLaunch, setInitialGameToLaunch] = useState<"balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | "alphabetSequence" | null>(null);
+
+  const handleSwitchTab = (tab: "home" | "explorer" | "games" | "stories" | "print" | "rewards", initialGame: "balloon" | "matching" | "quiz" | "oddOneOut" | "letterOrdering" | "alphabetSequence" | null = null) => {
+    setActiveTab(tab);
+    setInitialGameToLaunch(initialGame);
+    audio.playPopSound();
+  };
 
   // Load progress from localStorage
   useEffect(() => {
@@ -383,7 +390,7 @@ export default function App() {
       <div className="max-w-7xl mx-auto w-full px-4 pt-4 pb-1 no-print hidden md:block">
         <div className="bg-white/80 backdrop-blur-sm p-2 rounded-3xl border-r-4 border-b-4 border-sky-200 flex justify-center gap-3 shadow-sm">
           <button
-            onClick={() => { setActiveTab("home"); audio.playPopSound(); }}
+            onClick={() => handleSwitchTab("home")}
             className={`px-5 py-2.5 rounded-2xl font-bold font-sans text-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               activeTab === "home"
                 ? "bg-rose-500 text-white shadow-md border-b-4 border-rose-700"
@@ -394,7 +401,7 @@ export default function App() {
             <span>الرئيسية</span>
           </button>
           <button
-            onClick={() => { setActiveTab("explorer"); audio.playPopSound(); }}
+            onClick={() => handleSwitchTab("explorer")}
             className={`px-5 py-2.5 rounded-2xl font-bold font-sans text-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               activeTab === "explorer"
                 ? "bg-sky-500 text-white shadow-md border-b-4 border-sky-700"
@@ -405,7 +412,7 @@ export default function App() {
             <span>مسرح الحروف</span>
           </button>
           <button
-            onClick={() => { setActiveTab("games"); audio.playPopSound(); }}
+            onClick={() => handleSwitchTab("games")}
             className={`px-5 py-2.5 rounded-2xl font-bold font-sans text-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               activeTab === "games"
                 ? "bg-emerald-500 text-white shadow-md border-b-4 border-emerald-700"
@@ -416,7 +423,7 @@ export default function App() {
             <span>ألعاب ومرح</span>
           </button>
           <button
-            onClick={() => { setActiveTab("stories"); audio.playPopSound(); }}
+            onClick={() => handleSwitchTab("stories")}
             className={`px-5 py-2.5 rounded-2xl font-bold font-sans text-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               activeTab === "stories"
                 ? "bg-indigo-500 text-white shadow-md border-b-4 border-indigo-700"
@@ -427,7 +434,7 @@ export default function App() {
             <span>القصص المصورة</span>
           </button>
           <button
-            onClick={() => { setActiveTab("print"); audio.playPopSound(); }}
+            onClick={() => handleSwitchTab("print")}
             className={`px-5 py-2.5 rounded-2xl font-bold font-sans text-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               activeTab === "print"
                 ? "bg-purple-500 text-white shadow-md border-b-4 border-purple-700"
@@ -438,7 +445,7 @@ export default function App() {
             <span>أوراق العمل للطباعة</span>
           </button>
           <button
-            onClick={() => { setActiveTab("rewards"); audio.playPopSound(); }}
+            onClick={() => handleSwitchTab("rewards")}
             className={`px-5 py-2.5 rounded-2xl font-bold font-sans text-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 ${
               activeTab === "rewards"
                 ? "bg-amber-400 text-slate-900 shadow-md border-b-4 border-amber-600"
@@ -455,7 +462,7 @@ export default function App() {
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-b-4 border-yellow-400 px-4 py-4 flex flex-col gap-2.5 no-print animate-fade-in shadow-inner">
           <button
-            onClick={() => { setActiveTab("home"); setMobileMenuOpen(false); audio.playPopSound(); }}
+            onClick={() => { handleSwitchTab("home"); setMobileMenuOpen(false); }}
             className={`w-full py-3 px-4 rounded-xl font-bold font-sans text-right ${
               activeTab === "home" ? "bg-rose-50 text-rose-600" : "text-slate-600"
             }`}
@@ -463,7 +470,7 @@ export default function App() {
             🏠 الرئيسية والنشاط
           </button>
           <button
-            onClick={() => { setActiveTab("explorer"); setMobileMenuOpen(false); audio.playPopSound(); }}
+            onClick={() => { handleSwitchTab("explorer"); setMobileMenuOpen(false); }}
             className={`w-full py-3 px-4 rounded-xl font-bold font-sans text-right ${
               activeTab === "explorer" ? "bg-sky-50 text-sky-600" : "text-slate-600"
             }`}
@@ -471,7 +478,7 @@ export default function App() {
             📚 مسرح الحروف التفاعلي
           </button>
           <button
-            onClick={() => { setActiveTab("games"); setMobileMenuOpen(false); audio.playPopSound(); }}
+            onClick={() => { handleSwitchTab("games"); setMobileMenuOpen(false); }}
             className={`w-full py-3 px-4 rounded-xl font-bold font-sans text-right ${
               activeTab === "games" ? "bg-emerald-50 text-emerald-600" : "text-slate-600"
             }`}
@@ -479,7 +486,7 @@ export default function App() {
             🎈 ألعاب بالونات وتطابق الصور
           </button>
           <button
-            onClick={() => { setActiveTab("stories"); setMobileMenuOpen(false); audio.playPopSound(); }}
+            onClick={() => { handleSwitchTab("stories"); setMobileMenuOpen(false); }}
             className={`w-full py-3 px-4 rounded-xl font-bold font-sans text-right ${
               activeTab === "stories" ? "bg-indigo-50 text-indigo-600" : "text-slate-600"
             }`}
@@ -487,7 +494,7 @@ export default function App() {
             📖 قصص وحكايات كوكو المصورة
           </button>
           <button
-            onClick={() => { setActiveTab("print"); setMobileMenuOpen(false); audio.playPopSound(); }}
+            onClick={() => { handleSwitchTab("print"); setMobileMenuOpen(false); }}
             className={`w-full py-3 px-4 rounded-xl font-bold font-sans text-right ${
               activeTab === "print" ? "bg-purple-50 text-purple-600" : "text-slate-600"
             }`}
@@ -495,7 +502,7 @@ export default function App() {
             🖨️ أوراق عمل مجهزة للطباعة
           </button>
           <button
-            onClick={() => { setActiveTab("rewards"); setMobileMenuOpen(false); audio.playPopSound(); }}
+            onClick={() => { handleSwitchTab("rewards"); setMobileMenuOpen(false); }}
             className={`w-full py-3 px-4 rounded-xl font-bold font-sans text-right ${
               activeTab === "rewards" ? "bg-amber-50 text-amber-600" : "text-slate-600"
             }`}
@@ -643,11 +650,11 @@ export default function App() {
             </div>
 
             {/* Quick action cartoon layout bento grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-2" id="quick-bento">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-2" id="quick-bento">
               {/* Study Card */}
               <div
-                onClick={() => { setActiveTab("explorer"); audio.playPopSound(); }}
-                className="bg-gradient-to-tr from-sky-400 to-blue-500 p-6 rounded-[28px] text-white shadow-xl hover:scale-105 hover:shadow-2xl hover:shadow-sky-100 cursor-pointer transition-all flex flex-col justify-between h-44"
+                onClick={() => handleSwitchTab("explorer")}
+                className="bg-gradient-to-tr from-sky-400 to-blue-500 p-6 rounded-[28px] text-white shadow-xl hover:scale-105 hover:shadow-2xl hover:shadow-sky-100 cursor-pointer transition-all flex flex-col justify-between h-44 animate-fade-in"
               >
                 <span className="text-4xl">📚</span>
                 <div>
@@ -658,8 +665,8 @@ export default function App() {
 
               {/* Games Card */}
               <div
-                onClick={() => { setActiveTab("games"); audio.playPopSound(); }}
-                className="bg-gradient-to-tr from-emerald-400 to-teal-500 p-6 rounded-[28px] text-white shadow-xl hover:scale-105 hover:shadow-2xl hover:shadow-emerald-100 cursor-pointer transition-all flex flex-col justify-between h-44"
+                onClick={() => handleSwitchTab("games")}
+                className="bg-gradient-to-tr from-emerald-400 to-teal-500 p-6 rounded-[28px] text-white shadow-xl hover:scale-105 hover:shadow-2xl hover:shadow-emerald-100 cursor-pointer transition-all flex flex-col justify-between h-44 animate-fade-in"
               >
                 <span className="text-4xl">🎈</span>
                 <div>
@@ -668,10 +675,22 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Magical Alphabet Path Game Card */}
+              <div
+                onClick={() => handleSwitchTab("games", "alphabetSequence")}
+                className="bg-gradient-to-tr from-orange-400 to-amber-500 p-6 rounded-[28px] text-white shadow-xl hover:scale-105 hover:shadow-2xl hover:shadow-orange-100 cursor-pointer transition-all flex flex-col justify-between h-44 animate-fade-in"
+              >
+                <span className="text-4xl">🗺️</span>
+                <div>
+                  <h4 className="text-lg font-black font-sans">طريق الحروف السحري</h4>
+                  <p className="text-xs text-white/80 font-sans mt-0.5">رتب الحروف من الألف إلى الياء لتكسب التاج السحري</p>
+                </div>
+              </div>
+
               {/* Print worksheets card */}
               <div
-                onClick={() => { setActiveTab("print"); audio.playPopSound(); }}
-                className="bg-gradient-to-tr from-purple-500 to-pink-500 p-6 rounded-[28px] text-white shadow-xl hover:scale-105 hover:shadow-2xl hover:shadow-purple-100 cursor-pointer transition-all flex flex-col justify-between h-44"
+                onClick={() => handleSwitchTab("print")}
+                className="bg-gradient-to-tr from-purple-500 to-pink-500 p-6 rounded-[28px] text-white shadow-xl hover:scale-105 hover:shadow-2xl hover:shadow-purple-100 cursor-pointer transition-all flex flex-col justify-between h-44 animate-fade-in"
               >
                 <span className="text-4xl">🖨️</span>
                 <div>
@@ -701,6 +720,7 @@ export default function App() {
             progress={progress}
             onUpdateStars={handleUpdateStars}
             onUpdateHighScore={handleUpdateHighScore}
+            initialGame={initialGameToLaunch}
           />
         )}
 
